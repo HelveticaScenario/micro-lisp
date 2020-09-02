@@ -1,10 +1,9 @@
 #[cfg(test)]
 mod tests {
-    use crate::VM;
-use crate::parse;
     use crate::Error;
     use crate::AST;
-    use crate::AST::{Bool, Float, Int, List, Str, Symbol, Nil};
+    use crate::AST::{Bool, Float, Int, List, Nil, Str, Symbol};
+    use crate::VM;
 
     fn sym(s: &'static str) -> AST {
         Symbol(s.to_owned())
@@ -19,14 +18,14 @@ use crate::parse;
     fn parse_simple() {
         let code = "(hello)".to_owned();
         let expected_result = Ok(vec![List(vec![Symbol("hello".to_owned())])]);
-        assert_eq!(parse(code), expected_result);
+        assert_eq!(VM::parse(code), expected_result);
     }
 
     #[test]
     fn syntax_error() {
         let code = " (hello))".to_owned();
         let expected_result = Err(Error::SyntaxError(Some(8)));
-        assert_eq!(parse(code), expected_result);
+        assert_eq!(VM::parse(code), expected_result);
     }
 
     #[test]
@@ -59,13 +58,13 @@ use crate::parse;
                     Bool(true),
                     Str("Whats up".to_owned()),
                     Str("Doc".to_owned()),
-                    Nil
+                    Nil,
                 ]),
                 List(vec![sym("poop")]),
             ]),
             List(vec![sym("pee"), sym("peee")]),
         ]);
-        assert_eq!(parse(code), expected_result);
+        assert_eq!(VM::parse(code), expected_result);
     }
 
     #[test]
