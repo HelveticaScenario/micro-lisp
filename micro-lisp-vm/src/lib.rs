@@ -27,26 +27,17 @@ impl VM {
 
         let vm = Rc::new(RefCell::new(VM { env: env }));
         let vm_clone = vm.clone();
-        let define_internal = move |name: &String, func: Box<dyn Fn(Rc<RefCell<VM>>, &[Val]) -> Val>| {
+        let define_internal = move |name: &String, func: Box<dyn Fn(&mut VM, &[Val]) -> Val>| {
             let inner_clone = vm_clone.clone();
             if let Some(scope) = vm_clone.borrow_mut().env.last_mut() {
-                scope.insert(
-                    name.clone(),
-                    Val::Proc(Procedure::new(
-                        name.clone(),
-                        Box::new(move |ast| func(inner_clone.clone(), ast)),
-                    )),
-                );
+                scope.insert(name.clone(), Val::Proc(Procedure::new(name.clone(), func)));
             }
         };
 
-        define_internal(
-            &"+".to_owned(),
-            Box::new(|clone, ast| clone.borrow().add(ast)),
-        );
+        define_internal(&"+".to_owned(), Box::new(|vm: &mut VM, ast| vm.add(ast)));
         define_internal(
             &"define".to_owned(),
-            Box::new(|clone, ast| clone.borrow_mut().define(ast)),
+            Box::new(|vm: &mut VM, ast| vm.define(ast)),
         );
         return vm;
     }
@@ -97,22 +88,64 @@ impl VM {
         return None;
     }
 
-    pub fn eval(&mut self, arg: &Val) -> Val {
-        match arg {
-            Val::Symbol(name) => self.search_env(name).unwrap_or(Val::RuntimeError),
-            Val::List(list) => {
-                if let Some(Val::Proc(procedure)) = list.first() {
-                    procedure.call(&list[1..])
-                } else {
-                    Val::RuntimeError
+    pub fn eval(&mut self, arg: Option<&Val>) -> Option<Val> {
+        if let Some(val) = arg {
+            match val {
+                Val::Symbol(name) => Some(self.search_env(name).unwrap_or(Val::RuntimeError)),
+                Val::List(list) => {
+                    if let Some(Val::Proc(procedure)) = self.eval(list.first()) {
+                        Some(procedure.call(self, &list[1..]))
+                    } else {
+                        Some(Val::RuntimeError)
+                    }
                 }
+                _ => Some(val.clone()),
             }
-            _ => arg.clone(),
+        } else {
+            None
         }
     }
 
     pub fn parse(code: &String) -> Result<Vec<AST>, Error> {
         let mut ast_stack: Vec<AST> = vec![AST::List(vec![])];
+        let pop_parse_push = |character, ast_stack: &mut Vec<AST>| {
+            if let Some(ast) = ast_stack.pop() {
+                match ast {
+                    AST::Str(mut s) => {
+                        s.push(character);
+                        ast_stack.push(AST::Str(s));
+                    }
+                    AST::Symbol(sym) => {
+                        if let Some(AST::List(list)) = ast_stack.last_mut() {
+                            list.push(if sym == "nil" {
+                                AST::Nil
+                            } else if let Ok(b) = sym.parse::<bool>() {
+                                AST::Bool(b)
+                            } else if let Ok(i) = sym.parse::<i64>() {
+                                AST::Int(i)
+                            } else if let Ok(f) = sym.parse::<f64>() {
+                                AST::Float(f)
+                            } else {
+                                AST::Symbol(sym)
+                            });
+                        } else {
+                            return Err(());
+                        }
+                    }
+                    AST::Bool(_) | AST::Float(_) | AST::Int(_) | AST::Nil => {
+                        if let Some(AST::List(list)) = ast_stack.last_mut() {
+                            list.push(ast);
+                        } else {
+                            return Err(());
+                        }
+                    }
+                    AST::List(_) => {
+                        ast_stack.push(ast);
+                    }
+                }
+            }
+            return Ok(());
+        };
         let mut escaped: bool = false;
         for (idx, character) in code.chars().enumerate() {
             let err = Err(Error::SyntaxError(Some(idx)));
@@ -128,15 +161,8 @@ impl VM {
                     }
                 }
                 (')', false) => {
-                    if let Some(AST::Str(s)) = ast_stack.last_mut() {
-                        s.push(character);
-                        continue;
-                    }
-                    if let Some(AST::Symbol(_)) = ast_stack.last() {
-                        let sym = ast_stack.pop().unwrap();
-                        if let Some(AST::List(list)) = ast_stack.last_mut() {
-                            list.push(sym);
-                        }
+                    if let Err(_) = pop_parse_push(character, &mut ast_stack) {
+                        return err;
                     }
                     // there is an implicit root list, so if we try to close a list and all we have is the
                     // root then there is a syntax error
@@ -171,40 +197,8 @@ impl VM {
                     escaped = true;
                 }
                 (' ', _) | ('\n', _) | ('\t', _) | ('\r', _) => {
-                    if let Some(ast) = ast_stack.pop() {
-                        match ast {
-                            AST::Str(mut s) => {
-                                s.push(character);
-                                ast_stack.push(AST::Str(s));
-                            }
-                            AST::Symbol(sym) => {
-                                if let Some(AST::List(list)) = ast_stack.last_mut() {
-                                    list.push(if sym == "nil" {
-                                        AST::Nil
-                                    } else if let Ok(b) = sym.parse::<bool>() {
-                                        AST::Bool(b)
-                                    } else if let Ok(i) = sym.parse::<i64>() {
-                                        AST::Int(i)
-                                    } else if let Ok(f) = sym.parse::<f64>() {
-                                        AST::Float(f)
-                                    } else {
-                                        AST::Symbol(sym)
-                                    });
-                                } else {
-                                    return err;
-                                }
-                            }
-                            AST::Bool(_) | AST::Float(_) | AST::Int(_) | AST::Nil => {
-                                if let Some(AST::List(list)) = ast_stack.last_mut() {
-                                    list.push(ast);
-                                } else {
-                                    return err;
-                                }
-                            }
-                            AST::List(_) => {
-                                ast_stack.push(ast);
-                            }
-                        }
+                    if let Err(_) = pop_parse_push(character, &mut ast_stack) {
+                        return err;
                     }
                 }
                 _ => {
@@ -244,7 +238,10 @@ impl VM {
     pub fn exec(&mut self, code: &String) -> Result<Val, Error> {
         match VM::parse(code) {
             Ok(ast) => {
-                let vals: Vec<Val> = ast.iter().map(|ast| self.eval(&Val::from(ast))).collect();
+                let vals: Vec<Val> = ast
+                    .iter()
+                    .map(|ast| self.eval(Some(&Val::from(ast))).unwrap_or(Val::Nil))
+                    .collect();
                 if vals.len() == 1 {
                     return Ok(vals.first().unwrap().clone());
                 } else {
@@ -254,8 +251,4 @@ impl VM {
             Err(e) => Err(e),
         }
     }
-}
-
-pub fn hello() {
-    println!("hello lib");
 }

@@ -1,6 +1,9 @@
+use crate::VM;
 use rand::Rng;
 use std::fmt;
 use std::rc::Rc;
+
+
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AST {
@@ -22,19 +25,19 @@ pub enum Error {
 pub struct Procedure {
   _id: u128,
   name: String,
-  func: Rc<Box<dyn Fn(&[Val]) -> Val>>,
+  func: Rc<Box<dyn Fn(&mut VM, &[Val]) -> Val>>,
 }
 
 impl Procedure {
-  pub fn new(name: String, func: Box<dyn Fn(&[Val]) -> Val>) -> Self {
+  pub fn new(name: String, func: Box<dyn Fn(&mut VM, &[Val]) -> Val>) -> Self {
     Self {
       _id: rand::thread_rng().gen(),
       name,
       func: Rc::new(func),
     }
   }
-  pub fn call(&self, args: &[Val]) -> Val {
-    self.func.clone()(args)
+  pub fn call(&self, vm: &mut VM, args: &[Val]) -> Val {
+    self.func.clone()(vm, args)
   }
 }
 

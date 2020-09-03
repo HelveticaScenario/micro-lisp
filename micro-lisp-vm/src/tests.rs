@@ -1,12 +1,9 @@
 #[cfg(test)]
 mod tests {
-    use crate::Error;
-    use crate::AST;
-    use crate::AST::{Bool, Float, Int, List, Nil, Str, Symbol};
-    use crate::VM;
+    use crate::{Error, Val, AST, VM};
 
     fn sym(s: &'static str) -> AST {
-        Symbol(s.to_owned())
+        AST::Symbol(s.to_owned())
     }
 
     #[test]
@@ -17,7 +14,7 @@ mod tests {
     #[test]
     fn parse_simple() {
         let code = "(hello)".to_owned();
-        let expected_result = Ok(vec![List(vec![Symbol("hello".to_owned())])]);
+        let expected_result = Ok(vec![AST::List(vec![AST::Symbol("hello".to_owned())])]);
         assert_eq!(VM::parse(&code), expected_result);
     }
 
@@ -45,32 +42,32 @@ mod tests {
         "#
         .to_owned();
         let expected_result = Ok(vec![
-            List(vec![
+            AST::List(vec![
                 sym("foo"),
                 sym("bar"),
                 sym("baz"),
-                List(vec![
+                AST::List(vec![
                     sym("a"),
                     sym("bcd"),
                     sym("e"),
-                    Int(123),
-                    Float(5.9),
-                    Bool(true),
-                    Str("Whats up".to_owned()),
-                    Str("Doc".to_owned()),
-                    Nil,
+                    AST::Int(123),
+                    AST::Float(5.9),
+                    AST::Bool(true),
+                    AST::Str("Whats up".to_owned()),
+                    AST::Str("Doc".to_owned()),
+                    AST::Nil,
                 ]),
-                List(vec![sym("poop")]),
+                AST::List(vec![sym("poop")]),
             ]),
-            List(vec![sym("pee"), sym("peee")]),
+            AST::List(vec![sym("pee"), sym("peee")]),
         ]);
         assert_eq!(VM::parse(&code), expected_result);
     }
 
     #[test]
     fn simple_exec() {
-        let code = "(+ 1 1)".to_owned();
-        let expected_result = Ok(Int(2));
+        let code = "(+ 1 1) (+ 2 4)".to_owned();
+        let expected_result: Result<Val, Error> = Ok(Val::List(vec![Val::Int(2), Val::Int(6)]));
         let vm = VM::new();
         assert_eq!(vm.borrow_mut().exec(&code), expected_result);
     }
