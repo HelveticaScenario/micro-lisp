@@ -27,11 +27,11 @@ impl VM {
 
         let vm = Rc::new(RefCell::new(VM { env: env }));
         let vm_clone = vm.clone();
-        let define_internal = move |name, func: Box<dyn Fn(Rc<RefCell<VM>>, &[Val]) -> Val>| {
+        let define_internal = move |name: &String, func: Box<dyn Fn(Rc<RefCell<VM>>, &[Val]) -> Val>| {
             let inner_clone = vm_clone.clone();
             if let Some(scope) = vm_clone.borrow_mut().env.last_mut() {
                 scope.insert(
-                    name,
+                    name.clone(),
                     Val::Proc(Procedure::new(
                         name.clone(),
                         Box::new(move |ast| func(inner_clone.clone(), ast)),
@@ -41,11 +41,11 @@ impl VM {
         };
 
         define_internal(
-            "+".to_owned(),
+            &"+".to_owned(),
             Box::new(|clone, ast| clone.borrow().add(ast)),
         );
         define_internal(
-            "define".to_owned(),
+            &"define".to_owned(),
             Box::new(|clone, ast| clone.borrow_mut().define(ast)),
         );
         return vm;
@@ -111,7 +111,7 @@ impl VM {
         }
     }
 
-    pub fn parse(code: String) -> Result<Vec<AST>, Error> {
+    pub fn parse(code: &String) -> Result<Vec<AST>, Error> {
         let mut ast_stack: Vec<AST> = vec![AST::List(vec![])];
         let mut escaped: bool = false;
         for (idx, character) in code.chars().enumerate() {
@@ -241,17 +241,17 @@ impl VM {
         return Err(Error::SyntaxError(None));
     }
 
-    pub fn exec(&mut self, code: String) -> Result<Val, Error> {
+    pub fn exec(&mut self, code: &String) -> Result<Val, Error> {
         match VM::parse(code) {
             Ok(ast) => {
-                let vals = ast.iter().map(|ast| self.eval(&Val::from(ast))).collect();
+                let vals: Vec<Val> = ast.iter().map(|ast| self.eval(&Val::from(ast))).collect();
                 if vals.len() == 1 {
-                    return Ok(vals.first().unwrap());
+                    return Ok(vals.first().unwrap().clone());
                 } else {
                     return Ok(Val::List(vals));
                 }
             }
-            e => e,
+            Err(e) => Err(e),
         }
     }
 }

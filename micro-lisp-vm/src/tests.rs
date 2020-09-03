@@ -18,14 +18,14 @@ mod tests {
     fn parse_simple() {
         let code = "(hello)".to_owned();
         let expected_result = Ok(vec![List(vec![Symbol("hello".to_owned())])]);
-        assert_eq!(VM::parse(code), expected_result);
+        assert_eq!(VM::parse(&code), expected_result);
     }
 
     #[test]
     fn syntax_error() {
         let code = " (hello))".to_owned();
         let expected_result = Err(Error::SyntaxError(Some(8)));
-        assert_eq!(VM::parse(code), expected_result);
+        assert_eq!(VM::parse(&code), expected_result);
     }
 
     #[test]
@@ -64,14 +64,14 @@ mod tests {
             ]),
             List(vec![sym("pee"), sym("peee")]),
         ]);
-        assert_eq!(VM::parse(code), expected_result);
+        assert_eq!(VM::parse(&code), expected_result);
     }
 
     #[test]
     fn simple_exec() {
         let code = "(+ 1 1)".to_owned();
-        let expected_result = Int(2);
+        let expected_result = Ok(Int(2));
         let vm = VM::new();
-        assert_eq!(vm.borrow_mut().exec(code), expected_result);
+        assert_eq!(vm.borrow_mut().exec(&code), expected_result);
     }
 }
