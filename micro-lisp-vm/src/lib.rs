@@ -13,7 +13,6 @@ mod types;
 
 use crate::types::{Error, Procedure, Val, AST};
 use std::cell::RefCell;
-use std::cell::RefMut;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -28,13 +27,15 @@ impl VM {
         let vm = Rc::new(RefCell::new(VM { env: env }));
         let vm_clone = vm.clone();
         let define_internal = move |name: &String, func: Box<dyn Fn(&mut VM, &[Val]) -> Val>| {
-            let inner_clone = vm_clone.clone();
             if let Some(scope) = vm_clone.borrow_mut().env.last_mut() {
                 scope.insert(name.clone(), Val::Proc(Procedure::new(name.clone(), func)));
             }
         };
 
         define_internal(&"+".to_owned(), Box::new(|vm: &mut VM, ast| vm.add(ast)));
+        define_internal(&"-".to_owned(), Box::new(|vm: &mut VM, ast| vm.sub(ast)));
+        define_internal(&"*".to_owned(), Box::new(|vm: &mut VM, ast| vm.mul(ast)));
+        define_internal(&"/".to_owned(), Box::new(|vm: &mut VM, ast| vm.div(ast)));
         define_internal(
             &"define".to_owned(),
             Box::new(|vm: &mut VM, ast| vm.define(ast)),
@@ -43,16 +44,33 @@ impl VM {
     }
 
     fn define(&mut self, args: &[Val]) -> Val {
-        return Val::RuntimeError;
+        if args.len() != 2 {
+            Val::RuntimeError
+        } else if let (Some(Val::Symbol(name)), val) = (args.get(0), args.get(1)) {
+            if let Some(res) = self.eval(val) {
+                if let Some(env) = self.env.last_mut() {
+                    env.insert(name.clone(), res);
+                    Val::Nil
+                } else {
+                    Val::RuntimeError
+                }
+            } else {
+                Val::RuntimeError
+            }
+        } else {
+            Val::RuntimeError
+        }
     }
 
-    fn add(&self, args: &[Val]) -> Val {
+    fn add(&mut self, args: &[Val]) -> Val {
         if args.len() < 2 {
-            Val::RuntimeError
-        } else if let Some(Val::Int(_)) = args.first() {
-            VM::add_ints(args)
-        } else if let Some(Val::Float(_)) = args.first() {
-            VM::add_floats(args)
+            return Val::RuntimeError;
+        }
+        let evaluated: Vec<Val> = args.iter().map(|arg| self.eval(Some(arg)).unwrap()).collect();
+        if let Some(Val::Int(_)) = evaluated.first() {
+            VM::add_ints(&evaluated)
+        } else if let Some(Val::Float(_)) = evaluated.first() {
+            VM::add_floats(&evaluated)
         } else {
             Val::RuntimeError
         }
@@ -78,6 +96,119 @@ impl VM {
             }
         }
         return Val::Float(sum);
+    }
+    fn sub(&mut self, args: &[Val]) -> Val {
+        if args.len() < 2 {
+            return Val::RuntimeError
+        } 
+        let evaluated: Vec<Val> = args.iter().map(|arg| self.eval(Some(arg)).unwrap()).collect();
+        if let Some(Val::Int(_)) = evaluated.first() {
+            VM::sub_ints(&evaluated)
+        } else if let Some(Val::Float(_)) = evaluated.first() {
+            VM::sub_floats(&evaluated)
+        } else {
+            Val::RuntimeError
+        }
+    }
+    fn sub_ints(args: &[Val]) -> Val {
+        let mut res = 0i64;
+        for val in args.iter() {
+            if let Val::Int(i) = val {
+                res -= i;
+            } else {
+                return Val::RuntimeError;
+            }
+        }
+        return Val::Int(res);
+    }
+    fn sub_floats(args: &[Val]) -> Val {
+        let mut res = 0f64;
+        for val in args.iter() {
+            if let Val::Float(i) = val {
+                res -= i;
+            } else {
+                return Val::RuntimeError;
+            }
+        }
+        return Val::Float(res);
+    }
+    fn mul(&mut self, args: &[Val]) -> Val {
+        if args.len() < 2 {
+            return Val::RuntimeError
+        } 
+        let evaluated: Vec<Val> = args.iter().map(|arg| self.eval(Some(arg)).unwrap()).collect();
+        if let Some(Val::Int(_)) = evaluated.first() {
+            VM::mul_ints(&evaluated)
+        } else if let Some(Val::Float(_)) = evaluated.first() {
+            VM::mul_floats(&evaluated)
+        } else {
+            Val::RuntimeError
+        }
+    }
+    fn mul_ints(args: &[Val]) -> Val {
+        let mut res = 1i64;
+        for val in args.iter() {
+            if let Val::Int(i) = val {
+                res *= i;
+            } else {
+                return Val::RuntimeError;
+            }
+        }
+        return Val::Int(res);
+    }
+    fn mul_floats(args: &[Val]) -> Val {
+        let mut res = 1f64;
+        for val in args.iter() {
+            if let Val::Float(i) = val {
+                res *= i;
+            } else {
+                return Val::RuntimeError;
+            }
+        }
+        return Val::Float(res);
+    }
+    fn div(&mut self, args: &[Val]) -> Val {
+        if args.len() < 2 {
+            return Val::RuntimeError
+        } 
+        let evaluated: Vec<Val> = args.iter().map(|arg| self.eval(Some(arg)).unwrap()).collect();
+        if let Some(Val::Int(_)) = evaluated.first() {
+            VM::div_ints(&evaluated)
+        } else if let Some(Val::Float(_)) = evaluated.first() {
+            VM::div_floats(&evaluated)
+        } else {
+            Val::RuntimeError
+        }
+    }
+    fn div_ints(args: &[Val]) -> Val {
+        if let Some(Val::Int(first)) = args.first() {
+            let mut res = *first;
+            for val in args[1..].iter() {
+                if let Val::Int(i) = val {
+                    res /= i;
+                } else {
+                    return Val::RuntimeError;
+                }
+            }
+            return Val::Int(res);
+        } else {
+            Val::RuntimeError
+        }
+    }
+    fn div_floats(args: &[Val]) -> Val {
+        if let Some(Val::Float(first)) = args.first() {
+            let mut res = *first;
+            for val in args[1..].iter() {
+                if let Val::Float(i) = val {
+                    res /= i;
+                } else {
+                    return Val::RuntimeError;
+                }
+            }
+            return Val::Float(res);
+        } else {
+            Val::RuntimeError
+        }
     }
     fn search_env(&mut self, name: &String) -> Option<Val> {
         for env in self.env.iter().rev() {
