@@ -67,7 +67,16 @@ mod tests {
     #[test]
     fn simple_exec() {
         let code = "(define pi 3.14) (+ 1 1) (* 2.0 pi)".to_owned();
-        let expected_result: Result<Val, Error> = Ok(Val::List(vec![Val::Nil, Val::Int(2), Val::Float(6.28)]));
+        let expected_result: Result<Val, Error> = Ok(Val::Float(6.28));
+        let vm = VM::new();
+        assert_eq!(vm.borrow_mut().exec(&code), expected_result);
+    }
+
+    #[test]
+    fn lambda_exec() {
+        let code = "((lambda (x y) (+ x y)) 1 2)".to_owned();
+        let expected_result: Result<Val, Error> =
+            Ok(Val::Int(3));
         let vm = VM::new();
         assert_eq!(vm.borrow_mut().exec(&code), expected_result);
     }

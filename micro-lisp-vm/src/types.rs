@@ -1,9 +1,40 @@
 use crate::VM;
 use rand::Rng;
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
 
+pub struct Env {
+  pub parent: Option<Rc<Box<Env>>>,
+  pub definitions: RefCell<HashMap<String, Val>>,
+}
 
+impl Env {
+  pub fn new(parent: Option<Rc<Box<Env>>>) -> Self {
+    Env {
+      parent,
+      definitions: RefCell::new(HashMap::new()),
+    }
+  }
+
+  pub fn get_val(&self, key: &String) -> Option<Val> {
+    if let Some(val) = self.definitions.borrow().get(key) {
+      return Some(val.clone());
+    } else if let Some(parent) = &self.parent {
+      return parent.get_val(key);
+    } else {
+      return None;
+    }
+  }
+  pub fn set_val(&self, key: &String, val: Val) -> Option<Val> {
+    self.definitions.borrow_mut().insert(key.clone(), val)
+  }
+
+  pub fn is_root(&self) -> bool {
+    self.parent.is_none()
+  }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AST {
@@ -16,34 +47,40 @@ pub enum AST {
   Nil,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Error {
   SyntaxError(Option<usize>),
+  DefineNotAtRoot,
+  IncorrectNumberOfArguments,
+  InvalidArgumentList,
+  IncorrectType,
+  SymbolNotDefined(String),
+  Unknown,
 }
 
 #[derive(Clone)]
 pub struct Procedure {
   _id: u128,
   name: String,
-  func: Rc<Box<dyn Fn(&mut VM, &[Val]) -> Val>>,
+  func: Rc<Box<dyn Fn(&mut VM, &[Val], Rc<Box<Env>>) -> Val>>,
 }
 
 impl Procedure {
-  pub fn new(name: String, func: Box<dyn Fn(&mut VM, &[Val]) -> Val>) -> Self {
+  pub fn new(name: String, func: Box<dyn Fn(&mut VM, &[Val], Rc<Box<Env>>) -> Val>) -> Self {
     Self {
       _id: rand::thread_rng().gen(),
       name,
       func: Rc::new(func),
     }
   }
-  pub fn call(&self, vm: &mut VM, args: &[Val]) -> Val {
-    self.func.clone()(vm, args)
+  pub fn call(&self, vm: &mut VM, args: &[Val], env: Rc<Box<Env>>) -> Val {
+    self.func.clone()(vm, args, env)
   }
 }
 
 impl PartialEq for Procedure {
   fn eq(&self, other: &Self) -> bool {
-    self._id == self._id
+    self._id == other._id
   }
 }
 
@@ -66,7 +103,7 @@ pub enum Val {
   List(Vec<Val>),
   Nil,
   Proc(Procedure),
-  RuntimeError, // Func(fn(Vec<Val>) -> Val),
+  RuntimeError(Error), // Func(fn(Vec<Val>) -> Val),
 }
 
 impl From<&AST> for Val {
